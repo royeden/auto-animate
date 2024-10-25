@@ -101,6 +101,11 @@ const DEL = "__aa_del"
 const NEW = "__aa_new"
 
 /**
+ * Allows you to style the parent element via `[data-]` selectors
+ */
+const DEFAULT_DATA_ATTRIBUTE = "autoanimate"
+
+/**
  * Callback for handling all mutations.
  * @param mutations - A mutation list
  */
@@ -121,6 +126,25 @@ const handleResizes: ResizeObserverCallback = (entries) => {
     if (entry.target === root) updateAllPos()
     if (coords.has(entry.target)) updatePos(entry.target)
   })
+}
+
+/**
+ *
+ * @param el - the element to apply the parent's data attribute
+ */
+function setParentDataAttribute(el: Element, state?: "add" | "remove") {
+  const optionsOrPlugin = getOptions(el)
+  const parentDataAttribute =
+    !isPlugin(optionsOrPlugin) && optionsOrPlugin.parentDataAttribute
+
+  if (parentDataAttribute) {
+    const attributeName = `data-${typeof parentDataAttribute === "string" ? parentDataAttribute : DEFAULT_DATA_ATTRIBUTE}`
+    if (state) {
+      el.parentElement?.setAttribute(attributeName, state)
+    } else {
+      el.parentElement?.removeAttribute(attributeName)
+    }
+  }
 }
 
 /**
@@ -181,6 +205,8 @@ function updatePos(el: Element) {
         observePosition(el)
       } catch {
         // ignore errors as the `.finished` promise is rejected when animations were cancelled
+      } finally {
+        setParentDataAttribute(el)
       }
     }, delay)
   )
@@ -211,11 +237,11 @@ function updateAllPos() {
  */
 function poll(el: Element) {
   setTimeout(() => {
-    intervals.set(
-      el,
-      setInterval(() => lowPriority(updatePos.bind(null, el)), 2000)
-    )
-  }, Math.round(2000 * Math.random()))
+      intervals.set(
+        el,
+        setInterval(() => lowPriority(updatePos.bind(null, el)), 2000)
+      )
+    }, Math.round(2000 * Math.random()))
 }
 
 /**
@@ -564,6 +590,7 @@ function add(el: Element) {
   const pluginOrOptions = getOptions(el)
   if (!isEnabled(el)) return
   let animation: Animation
+  setParentDataAttribute(el, "add")
   if (typeof pluginOrOptions !== "function") {
     animation = el.animate(
       [
@@ -604,6 +631,7 @@ function cleanUp(el: Element, styles?: Partial<CSSStyleDeclaration>) {
         el.style[style as any] = ""
       }
     }
+    setParentDataAttribute(el)
   }, 0)
 }
 
@@ -636,6 +664,7 @@ function remove(el: Element) {
   }
 
   let animation: Animation
+  setParentDataAttribute(el, "remove")
   let styleReset: Partial<CSSStyleDeclaration> = {
     position: "absolute",
     top: `${top}px`,
@@ -768,6 +797,10 @@ function deletePosition(
 
 export interface AutoAnimateOptions {
   /**
+   * Helps handle css styles on the parent
+   */
+  parentDataAttribute?: boolean | string
+  /**
    * The time it takes to run a single sequence of animations in milliseconds.
    */
   duration: number
@@ -801,7 +834,7 @@ export interface AutoAnimationPlugin {
     newCoordinates?: T extends "add" | "remain" | "remove"
       ? Coordinates
       : undefined,
-    oldCoordinates?: T extends "remain" ? Coordinates : undefined
+    oldCoordinates?: T extends "remain" ? Coordinates : undefined,
   ): KeyframeEffect | [KeyframeEffect, AutoAnimationPluginOptions]
 }
 
@@ -814,7 +847,7 @@ export interface AutoAnimationPlugin {
  */
 export default function autoAnimate(
   el: HTMLElement,
-  config: Partial<AutoAnimateOptions> | AutoAnimationPlugin = {}
+  config: Partial<AutoAnimateOptions> | AutoAnimationPlugin = {},
 ): AnimationController {
   if (mutations && resize) {
     const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)")
